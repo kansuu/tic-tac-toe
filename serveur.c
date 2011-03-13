@@ -11,23 +11,49 @@
 #include <stdlib.h>
 #include <arpa/inet.h>
 #define MON_PORT 3500
-#define TAMPON_MAXIMAL 100
+#define TAMPON_MAXIMAL 500
 #define NB_MAX_EN_ATTENTE 2
 
 /*****
  * QuitterEnErreur : Ferme le programme en affichant le mssage d'erreur recu
  *					 en paramètre.
  */
-void QuitterEnErreur(char* p_message)
+void QuitterEnErreur(char *p_message)
 	{
 	printf("%s\nErreur : %d", p_message, errno);
 	exit(0);
 	}
 
 /*****
+ * Recevoir : Recois les messages à partir d'un descripteur de Socket.
+ */
+void Recevoir(int p_socket)
+	{
+	char tampon[TAMPON_MAXIMAL];
+	int tailleMessageRecu= 0;
+
+	for(;;)
+		{
+		if ((tailleMessageRecu= recv(p_socket, tampon, TAMPON_MAXIMAL - 1, 0)) < 0)
+			QuitterEnErreur("Recv() à échoué");
+
+		/* On enleve les 2  \n produit lorsque je pese sur enter... */
+		tampon[tailleMessageRecu - 2] = '\0';
+
+		/***/
+		if (0 == strcmp("quitter", tampon)) break;
+		/***/
+
+		printf("%s\n", tampon);
+		}
+
+	close(p_socket);
+	}
+
+/*****
  * PROGRAMME PRINCIPAL
  */
-int main(int argc, char* argv[])
+int main(int argc, char *argv[])
 	{
 	int sdServeur; /* Descripteur de Socket */
 	struct sockaddr_in monAdr; /* Informations sur le socket */
@@ -61,8 +87,9 @@ int main(int argc, char* argv[])
 			QuitterEnErreur("accept() à échoué");
 
 		printf("Gestion du client %s\n", inet_ntoa(adrClient.sin_addr));
+		Recevoir(sockClient);
 		}
-
+	
 	return 1;
 	}
 
