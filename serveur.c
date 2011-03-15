@@ -10,9 +10,15 @@
 #include <unistd.h>
 #include <stdlib.h>
 #include <arpa/inet.h>
+#include "serveur.h"
 #define MON_PORT 3500
-#define TAMPON_MAXIMAL 500
 #define NB_MAX_EN_ATTENTE 2
+#define TAILLE_STRING_GRILLE 50
+
+void TestJoueur(struct TypeJoueur *p_joueur)
+	{
+	printf("Adresse : %s\nSocket : %d\nPort : %d\n",inet_ntoa(p_joueur->adresse.sin_addr), p_joueur->socket, p_joueur->adresse.sin_port);
+	}
 
 /*****
  * QuitterEnErreur : Ferme le programme en affichant le mssage d'erreur recu
@@ -24,30 +30,46 @@ void QuitterEnErreur(char *p_message)
 	exit(0);
 	}
 
-/*****
- * Recevoir : Recois les messages à partir d'un descripteur de Socket.
- */
-void Recevoir(int p_socket)
+void EnvoyerGrille(int p_socket1, int p_socket2, char p_grille[3][3])
 	{
-	char tampon[TAMPON_MAXIMAL];
-	int tailleMessageRecu= 0;
+	char grille[TAILLE_STRING_GRILLE];
+	sprintf(grille, "%c | %c | %c\n"
+					"---------\n"
+					"%c | %c | %c\n"
+					"---------\n"
+					"%c | %c | %c\n", 
+					p_grille[0][0], p_grille[0][1], p_grille[0][2],
+					p_grille[1][0], p_grille[1][1], p_grille[1][2],
+					p_grille[2][0], p_grille[2][1], p_grille[2][2]);
 
-	for(;;)
-		{
-		if ((tailleMessageRecu= recv(p_socket, tampon, TAMPON_MAXIMAL - 1, 0)) < 0)
-			QuitterEnErreur("Recv() à échoué");
+	send(p_socket1, grille, TAILLE_STRING_GRILLE, 0);
+	send(p_socket2, grille, TAILLE_STRING_GRILLE, 0);
+	}
 
-		/* On enleve les 2  \n produit lorsque je pese sur enter... */
-		tampon[tailleMessageRecu - 2] = '\0';
+/*****
+ * TraiterJoueur : 
+ */
+void TraiterJoueur(struct TypeJoueur *p_pJoueurs[2])
+	{
+	char grille[3][3];
+	int i,j;
+	for (i= 0; i < 3; ++i)
+		for (j= 0; j < 3; ++j)
+			grille [i][j]= 'X';
 
-		/***/
-		if (0 == strcmp("quitter", tampon)) break;
-		/***/
+	EnvoyerGrille(p_pJoueurs[0]->socket, p_pJoueurs[1]->socket, grille);	
 
-		printf("%s\n", tampon);
-		}
+	/*send(p_pJoueurs[0]->socket, p_pJoueurs[0]->tampon, p_pJoueurs[0]->tailleMessage, 0);	*/
+	/*recv(p_pJoueurs[0]->socket, p_pJoueurs[0]->tampon, TAMPON_MAXIMAL - 1, 0);*/
+	/*printf("%s", p_pJoueurs[0]->tampon);
 
-	close(p_socket);
+	send(p_pJoueurs[1]->socket, p_pJoueurs[1]->tampon, p_pJoueurs[1]->tailleMessage, 0);*/
+	/*recv(p_pJoueurs[1]->socket, p_pJoueurs[1]->tampon, TAMPON_MAXIMAL - 1, 0);*/
+	/*printf("%s", p_pJoueurs[1]->tampon);*/
+
+	printf("On ferme...");
+	close(p_pJoueurs[0]->socket);
+	close(p_pJoueurs[1]->socket);
 	}
 
 /*****
@@ -77,17 +99,36 @@ int main(int argc, char *argv[])
 	if (listen(sdServeur, NB_MAX_EN_ATTENTE) < 0)
 		QuitterEnErreur("listen() à échoué");
 
+	struct TypeJoueur *pJoueurs[2];
+	
 	for(;;)
 		{
-		int sockClient = 0;
-		struct sockaddr_in adrClient = {0};
-		unsigned int tailleClient= sizeof(adrClient);
+		int i= 0;
+		for (; i < 2; ++i)
+			{
+			struct TypeJoueur *pJoueur = NULL;
+			pJoueur = malloc(sizeof(TypeJoueur));
 
-		if ((sockClient= (int)accept(sdServeur, (struct sockaddr*)& adrClient, &tailleClient)) < 0)
-			QuitterEnErreur("accept() à échoué");
+			if (pJoueur == NULL)
+				QuitterEnErreur("Allocation dynamique échou.");
 
-		printf("Gestion du client %s\n", inet_ntoa(adrClient.sin_addr));
-		Recevoir(sockClient);
+			pJoueur->tailleMessage= sizeof(pJoueur->adresse);
+
+			if ((pJoueur->socket= (int)accept(sdServeur, (struct sockaddr*) &pJoueur->adresse, &pJoueur->tailleMessage)) < 0)
+				QuitterEnErreur("accept() à échoué");
+
+			printf("Gestion du client %s\n", inet_ntoa(pJoueur->adresse.sin_addr));
+			
+			pJoueurs[i]= pJoueur;
+
+			TestJoueur(pJoueurs[i]);
+			}
+
+		/*if (fork() == 0)
+			{
+			close(sdServeur);*/
+			TraiterJoueur(pJoueurs);
+			/*}*/
 		}
 	
 	return 1;
